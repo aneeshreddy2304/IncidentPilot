@@ -1,0 +1,25 @@
+# API keys and webhook URLs. Set them out-of-band (or from the Settings UI,
+# which persists to the agent's own database, not here) instead of
+# committing real values:
+#   kubectl -n incidentpilot create secret generic agent-secrets \
+#     --from-literal=ANTHROPIC_API_KEY=sk-ant-...
+# REPLACE_ME placeholders are treated as "not configured" so
+# `kubectl apply -f deploy/k8s/` works for the ollama provider with no
+# secrets at all. Read once, on a genuinely empty database (a fresh
+# install, or the PVC was lost) — after that the agent's own database is
+# authoritative and this Secret is never consulted again, even across a
+# re-apply. See docs/security.md.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agent-secrets
+  namespace: incidentpilot
+type: Opaque
+stringData:
+  ANTHROPIC_API_KEY: "REPLACE_ME"
+  OPENAI_API_KEY: "REPLACE_ME"
+  DEEPSEEK_API_KEY: "REPLACE_ME"
+  GEMINI_API_KEY: "REPLACE_ME"
+  DISCORD_WEBHOOK_URL: ""
+  SLACK_WEBHOOK_URL: ""
+  TEAMS_WEBHOOK_URL: ""

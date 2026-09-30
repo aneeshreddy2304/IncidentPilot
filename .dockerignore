@@ -1,0 +1,9 @@
+.git
+.github
+.DS_Store
+web/node_modules
+web/dist
+design-system
+tools
+kubeconfig.local
+*.log

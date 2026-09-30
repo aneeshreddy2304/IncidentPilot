@@ -1,0 +1,25 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { color-scheme: dark; }
+  html { @apply antialiased; }
+  body { @apply min-h-screen bg-slate-950 text-slate-100; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  * { scrollbar-color: #334155 transparent; }
+  :focus-visible { @apply outline-none ring-2 ring-emerald-500 ring-offset-2 ring-offset-slate-950; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  }
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-slate-800 bg-slate-900/70 shadow-[0_16px_40px_rgba(0,0,0,.16)]; }
+  .btn { @apply inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-emerald-600 text-white hover:bg-emerald-500; }
+  .btn-ghost { @apply btn text-slate-400 hover:bg-slate-800 hover:text-slate-100; }
+  .input { @apply min-h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500; }
+  .link { @apply text-xs font-medium text-emerald-400 transition-colors hover:text-emerald-300 hover:underline; }
+  .eyebrow { @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500; }
+}

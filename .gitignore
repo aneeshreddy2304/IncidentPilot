@@ -1,0 +1,44 @@
+# --- Go ---
+/bin/
+/tools/kind
+*.test
+*.out
+cover.out
+coverage.html
+go.work
+go.work.sum
+
+# --- Frontend ---
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+
+# --- Docs site (VitePress) ---
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+npm-debug.log*
+yarn-error.log*
+
+# --- Env / secrets (never commit credentials) ---
+.env
+.env.*
+*.local
+kubeconfig
+*.kubeconfig
+*.pem
+*.key
+
+# --- Logs & temp ---
+*.log
+tmp/
+
+# --- Editor ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- OS ---
+.DS_Store
+Thumbs.db

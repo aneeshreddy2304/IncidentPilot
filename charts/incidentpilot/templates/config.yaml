@@ -1,0 +1,21 @@
+# API keys and webhook URLs. Read once, on a genuinely empty database (a
+# fresh install, or the PVC was lost) — after that the agent's own database
+# is authoritative and this Secret is never consulted again, even across
+# `helm upgrade`. Kept as a Secret (rather than inlined as Deployment env,
+# like the rest of the agent's bootstrap config) because real credentials
+# deserve Secret-specific RBAC and handling, not because it stays live.
+# See docs/security.md.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-agent-secrets
+  labels: {{- include "incidentpilot.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  ANTHROPIC_API_KEY: {{ .Values.llm.apiKeys.anthropic | quote }}
+  OPENAI_API_KEY: {{ .Values.llm.apiKeys.openai | quote }}
+  DEEPSEEK_API_KEY: {{ .Values.llm.apiKeys.deepseek | quote }}
+  GEMINI_API_KEY: {{ .Values.llm.apiKeys.gemini | quote }}
+  DISCORD_WEBHOOK_URL: {{ .Values.notifications.discordWebhookUrl | quote }}
+  SLACK_WEBHOOK_URL: {{ .Values.notifications.slackWebhookUrl | quote }}
+  TEAMS_WEBHOOK_URL: {{ .Values.notifications.teamsWebhookUrl | quote }}

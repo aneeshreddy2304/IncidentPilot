@@ -1,0 +1,3 @@
+# IncidentPilot
+
+IncidentPilot is a local-first, AI-assisted Kubernetes operations console. It brings cluster health, workloads, events, logs, and Prometheus metrics into one dashboard, while an AI investigator can inspect failures and propose targeted changes. In assisted mode, a human reviews the exact YAML diff and explicitly approves or rejects each proposal; the AI agent has read-only Kubernetes permissions, and only the server can apply an approved change. The application uses Go, React, Kubernetes, Ollama, and Prometheus, and the local setup is accessed through a private port-forward rather than a public endpoint.

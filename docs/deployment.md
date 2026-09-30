@@ -1,0 +1,197 @@
+# Deployment
+
+Two supported modes: **Docker** (local development machine, talks to any
+cluster your kubeconfig can reach) and **in-cluster** (plain Kubernetes
+manifests). Both run the same two images.
+
+## Docker mode
+
+Prerequisites: Docker with Compose, a kubeconfig, and (for the default
+provider) an Anthropic API key.
+
+```sh
+cd deploy/docker
+export ANTHROPIC_API_KEY=sk-ant-...
+docker compose up --build
+# UI: http://localhost:8080  (bound to 127.0.0.1 only)
+```
+
+Options (env vars read by the compose file):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `KUBECONFIG_FILE` | `~/.kube/config` | Which kubeconfig to mount (read-only) |
+| `LLM_PROVIDER` | `anthropic` | `anthropic` or `ollama` |
+| `LLM_MODEL` | provider default | Model override |
+| `AGENT_REVIEW_INTERVAL` | `5m` | Review cadence |
+
+### Using Ollama
+
+```sh
+LLM_PROVIDER=ollama docker compose --profile ollama up --build
+docker compose exec ollama ollama pull qwen3:0.6b   # once
+```
+
+### Docker mode with kind/minikube
+
+The kubeconfig is mounted *into containers*, so an API server address of
+`127.0.0.1:<port>` won't resolve. Two options:
+
+1. **kind**: create the cluster with an address the containers can reach:
+
+   ```sh
+   kind create cluster --config - <<'EOF'
+   kind: Cluster
+   apiVersion: kind.x-k8s.io/v1alpha4
+   networking:
+     apiServerAddress: "0.0.0.0"
+   EOF
+   ```
+
+   then edit the mounted kubeconfig copy to point at
+   `https://host.docker.internal:<port>` (the compose file already adds the
+   `host.docker.internal` host mapping), and set
+   `KUBECONFIG_FILE=/path/to/edited/config`. You may need
+   `insecure-skip-tls-verify: true` for that context since the certificate
+   doesn't include that hostname.
+
+2. **Simpler**: skip Docker mode for kind and either run `make dev` natively
+   or deploy in-cluster (below) — that's the mode kind exists for anyway.
+
+## In-cluster mode — Helm (recommended)
+
+```sh
+helm install incidentpilot ./charts/incidentpilot \
+  -n incidentpilot --create-namespace
+kubectl -n incidentpilot port-forward svc/incidentpilot-server 8080:80
+```
+
+Key values (full reference: `charts/incidentpilot/values.yaml`):
+
+| Value | Default | Purpose |
+| --- | --- | --- |
+| `mode` | `readonly` | `readonly` = observe + Q&A only (server has no write RBAC); `assisted` = approval-gated remediation + manifest editor + terminal. See [security.md](security.md). Switching modes requires a redeploy |
+| `llm.provider` | `ollama` | `ollama`, `anthropic`, `openai`, `deepseek`, `gemini` |
+| `llm.apiKeys.<provider>` | — | API key for the chosen cloud provider |
+| `ollama.enabled` | `true` | Bundled local LLM (disable when using a cloud provider); `ollama.externalHost` points at your own Ollama |
+| `prometheus.enabled` | `true` | Bundled metrics source; disable + set `prometheus.externalUrl` to reuse yours |
+| `agent.reviewInterval` | `5m` | Review cadence (cost lever for cloud providers) |
+| `agent.persistence.enabled` | `true` | Insight history PVC |
+| `notifications.*` | off | Discord/Slack/Teams webhooks + severity threshold |
+
+Upgrades: `helm upgrade incidentpilot ./charts/incidentpilot -n incidentpilot`.
+
+**These values only matter once** — on the agent's very first boot, when
+its database is empty. After that, they're never read again: not on
+restart, not on `helm upgrade`, no matter what `--set` you pass. Settings
+changed from the UI persist to the agent's own encrypted database, which is
+authoritative from that point forward. This is the same model most
+admin-panel apps use (Grafana's `grafana.ini` is analogous) — see
+[security.md](security.md) for how it's stored, and use the Settings UI for
+anything after the first install.
+
+If you *do* need to change something before the agent has ever booted
+(e.g. scripting a fresh install with a specific provider), pass it via
+`--set` at install time — `helm install` and the *first* `helm upgrade`
+before the agent starts both work fine for that.
+
+## In-cluster mode — raw manifests
+
+Prerequisites: `kubectl` against the target cluster, images available to the
+cluster (kind load, or push to a registry and adjust the `image:` fields).
+
+```sh
+# kind: build images, load them, apply everything
+make kind-deploy
+
+# minikube: build inside minikube's Docker daemon, apply everything
+make minikube-deploy MINIKUBE_PROFILE=my-profile
+
+# Other clusters: build, tag, push to your registry, adjust image: fields, then
+kubectl apply -f deploy/k8s/
+```
+
+What gets created (namespace `incidentpilot`):
+
+| Object | Notes |
+| --- | --- |
+| ServiceAccounts `server`, `agent` + ClusterRoles/Bindings | Split RBAC: server can update/patch + exec; agent is read-only, no secrets |
+| Secret `agent-secrets` | `ANTHROPIC_API_KEY` (placeholder — only needed for the anthropic provider) |
+| Deployments `server`, `agent` | Distroless, non-root, read-only rootfs, probes, resource limits |
+| Deployment `ollama` + PVC + Service | Local LLM (default provider); auto-pulls `qwen3:0.6b` on first boot (~1.5GB RAM — check node headroom). Delete it if you use anthropic |
+| Deployment `prometheus` + PVC + Service + RBAC | Minimal metrics source for the agent (kubelet scrape only, 7d retention). Have your own Prometheus? Point the agent at it (Settings → Metrics) and delete this one — commands in `06-prometheus.yaml` |
+| PVC `agent-data` | Insight history database (block storage recommended; avoid NFS) |
+| Services `server` (:80), `agent` (:8090) | ClusterIP only, no Ingress |
+
+The default provider is the in-cluster Ollama — it works out of the box, no
+key needed. The very first review can take a few minutes while the model
+downloads and loads.
+
+Switch to Anthropic Claude (better analysis quality) — easiest from the
+Settings UI once it's up. To bootstrap a *fresh, not-yet-started* install
+straight into Anthropic instead of Ollama, edit `LLM_PROVIDER` in
+`03-agent.yaml` before applying (or `kubectl edit deploy/agent` before its
+first-ever start), and set the key:
+
+```sh
+kubectl -n incidentpilot create secret generic agent-secrets \
+  --from-literal=ANTHROPIC_API_KEY=sk-ant-... \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+If the agent has already booted once, editing the Deployment's env or the
+Secret does nothing — see the note on "Upgrading" below. Use the Settings
+UI instead.
+
+```sh
+# optional: free the ollama resources
+kubectl -n incidentpilot delete deploy/ollama svc/ollama pvc/ollama-models
+```
+
+Access the UI (intentionally not exposed publicly — see
+[security.md](security.md)):
+
+```sh
+kubectl -n incidentpilot port-forward svc/server 8080:80
+# http://localhost:8080
+```
+
+### Upgrading
+
+Rebuild images, reload/push, then:
+
+```sh
+kubectl -n incidentpilot rollout restart deploy/server deploy/agent
+```
+
+Manifest changes: `kubectl apply -f deploy/k8s/` is idempotent, and always
+safe to re-run — `agent-secrets` only matters on the agent's very first
+boot (an empty database). A re-apply resets it back to the committed
+`REPLACE_ME` placeholders, but that has no effect on an already-running
+agent; anything configured since — whether from the Settings UI or a
+manual `kubectl create secret` before first boot — stays exactly as it
+was. The only way to make Kubernetes-side values matter again is an
+agent restart with a genuinely empty database (e.g. after deleting the
+PVC).
+
+### Uninstalling
+
+```sh
+kubectl delete -f deploy/k8s/
+```
+
+## Health checks
+
+- Server: `GET /healthz` on :8080
+- Agent: `GET /healthz` on :8090 (proxied at `/api/v1/agent/healthz`)
+
+## Troubleshooting
+
+| Symptom | Likely cause / fix |
+| --- | --- |
+| Dashboard loads, AI panel says "agent not reachable" | Agent pod not running, or `AGENT_URL` wrong. `kubectl -n incidentpilot logs deploy/agent` |
+| AI panel shows status `error` with an API error | Bad/missing `ANTHROPIC_API_KEY`, or Ollama host/model unavailable. The exact error is in the panel and agent logs |
+| `fatal: connecting to kubernetes` on startup | No kubeconfig found (Docker: check the mount; local: check `KUBECONFIG`) |
+| YAML apply fails with 403 | The server's ClusterRole doesn't cover that kind/verb — extend `deploy/k8s/01-rbac.yaml` |
+| Exec tab connects then closes immediately | The container has no `/bin/sh` (distroless images) — try another container, or the pod is not Running |
+| Docker mode can't reach kind cluster | kubeconfig points at 127.0.0.1 — see "Docker mode with kind/minikube" above |

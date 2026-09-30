@@ -1,0 +1,7 @@
+apiVersion: v2
+name: incidentpilot
+description: The AI sentinel for your Kubernetes cluster — a modern console with an AI agent that reviews, alerts, and diagnoses using read-only tools.
+type: application
+version: 0.7.2
+appVersion: "0.7.2"
+keywords: [kubernetes, ai, dashboard, monitoring, llm, sre]

@@ -1,0 +1,109 @@
+# RBAC is split on purpose:
+#   - "agent" is ALWAYS strictly read-only (get/list/watch + pods/log). It
+#     cannot mutate anything. Verify with:
+#       kubectl auth can-i delete pods --as=system:serviceaccount:incidentpilot:agent
+#   - "server" powers depend on the operating mode. This file ships the
+#     READ-ONLY server role (get/list/watch + pods/log). To run in ASSISTED
+#     mode (approval-gated remediation + manifest editor + terminal), add
+#     update/patch to each resource rule below and uncomment the pods/exec
+#     rule, AND set INCIDENTPILOT_MODE=assisted on both deployments
+#     (03-agent.yaml, 04-server.yaml). See docs/security.md.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: server
+  namespace: incidentpilot
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent
+  namespace: incidentpilot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: incidentpilot-server
+rules:
+  # ASSISTED mode: append "update, patch" to each verbs list below.
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+      - namespaces
+      - nodes
+      - events
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: incidentpilot-agent
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - configmaps
+      - persistentvolumeclaims
+      - namespaces
+      - nodes
+      - events
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get, list]
+  # Note: the agent deliberately has no access to secrets and no write verbs.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: incidentpilot-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: incidentpilot-server
+subjects:
+  - kind: ServiceAccount
+    name: server
+    namespace: incidentpilot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: incidentpilot-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: incidentpilot-agent
+subjects:
+  - kind: ServiceAccount
+    name: agent
+    namespace: incidentpilot

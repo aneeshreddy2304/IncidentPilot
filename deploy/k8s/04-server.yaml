@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: incidentpilot
+  labels:
+    app.kubernetes.io/name: incidentpilot
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: incidentpilot
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: incidentpilot
+        app.kubernetes.io/component: server
+    spec:
+      serviceAccountName: server
+      containers:
+        - name: server
+          image: incidentpilot-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: AGENT_URL
+              value: http://agent.incidentpilot.svc:8090
+            # Operating mode: "readonly" (default) or "assisted". Must match
+            # the agent (03-agent.yaml) and the RBAC in 01-rbac.yaml.
+            - name: INCIDENTPILOT_MODE
+              value: "assisted"
+            - name: LOG_FORMAT
+              value: json
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+---
+# ClusterIP by design: access via
+#   kubectl -n incidentpilot port-forward svc/server 8080:80
+# Do NOT expose this Service publicly — the UI has no authentication and can
+# exec into pods. See docs/security.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: incidentpilot
+spec:
+  selector:
+    app.kubernetes.io/name: incidentpilot
+    app.kubernetes.io/component: server
+  ports:
+    - port: 80
+      targetPort: http

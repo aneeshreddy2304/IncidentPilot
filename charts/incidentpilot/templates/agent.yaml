@@ -1,0 +1,131 @@
+{{- if .Values.agent.persistence.enabled }}
+# Insight history database (SQLite; use block storage, avoid NFS).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-agent-data
+  labels: {{- include "incidentpilot.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.agent.persistence.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-agent
+  labels:
+    {{- include "incidentpilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  # Exactly one replica: the agent is single-writer by design (one review
+  # loop, one notification stream, one SQLite writer).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "incidentpilot.selector" . | nindent 6 }}
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        {{- include "incidentpilot.selector" . | nindent 8 }}
+        app.kubernetes.io/component: agent
+    spec:
+      serviceAccountName: {{ .Release.Name }}-agent
+      securityContext:
+        fsGroup: 65532 # distroless nonroot uid; makes the data volume writable
+      {{- if .Values.agent.persistence.enabled }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-agent-data
+      {{- end }}
+      containers:
+        - name: agent
+          image: "{{ .Values.image.prefix }}-agent:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8090
+              name: http
+          # Deployment defaults: read once, only on a genuinely empty
+          # database (fresh install, or the PVC was lost). Once the agent
+          # has ever saved settings, these are never consulted again — the
+          # Settings UI is the only way to change anything after that. See
+          # docs/security.md.
+          env:
+            # Deploy-time constant (not a bootstrap-only setting): always
+            # read from env, gates whether the agent may propose changes.
+            - name: INCIDENTPILOT_MODE
+              value: {{ .Values.mode | quote }}
+            - name: LLM_PROVIDER
+              value: {{ .Values.llm.provider | quote }}
+            - name: LLM_MODEL
+              value: {{ .Values.llm.model | quote }}
+            - name: OLLAMA_HOST
+              value: {{ include "incidentpilot.ollamaHost" . | quote }}
+            - name: AGENT_REVIEW_INTERVAL
+              value: {{ .Values.agent.reviewInterval | quote }}
+            - name: AGENT_MONITOR_ENABLED
+              value: {{ .Values.agent.monitorEnabled | quote }}
+            - name: NOTIFICATIONS_ENABLED
+              value: {{ .Values.notifications.enabled | quote }}
+            - name: NOTIFY_MIN_SEVERITY
+              value: {{ .Values.notifications.minSeverity | quote }}
+            # Parenthesized lookups: `helm upgrade --reuse-values` from a
+            # pre-0.7 release has no notifications.report key at all, and a
+            # bare .Values.notifications.report.enabled would nil-pointer.
+            - name: REPORT_ENABLED
+              value: {{ (.Values.notifications.report).enabled | default false | quote }}
+            - name: REPORT_TIME
+              value: {{ (.Values.notifications.report).time | default "08:00" | quote }}
+            {{- if .Values.agent.persistence.enabled }}
+            - name: INSIGHT_DB_PATH
+              value: "/data/insights.db"
+            {{- end }}
+            - name: INSIGHT_RETENTION_DAYS
+              value: {{ .Values.agent.insightRetentionDays | quote }}
+            - name: PROMETHEUS_URL
+              value: {{ include "incidentpilot.prometheusUrl" . | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.logFormat | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-agent-secrets
+          {{- if .Values.agent.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- end }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources: {{- toYaml .Values.agent.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-agent
+  labels: {{- include "incidentpilot.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "incidentpilot.selector" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+  ports:
+    - port: 8090
+      targetPort: http
