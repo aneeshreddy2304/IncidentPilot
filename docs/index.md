@@ -14,7 +14,7 @@ hero:
       link: /deployment
     - theme: alt
       text: View on GitHub
-      link: https://incidentpilot.local/incidentpilot
+      link: https://github.com/aneeshreddy2304/IncidentPilot
 
 features:
   - text: AI-assisted investigation
