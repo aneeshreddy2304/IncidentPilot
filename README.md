@@ -22,9 +22,57 @@ Operational tooling must make problems easier to diagnose without allowing autom
 
 ## System architecture
 
-![IncidentPilot architecture — system components and principal workflows](docs/architecture-overview.svg)
+```mermaid
+flowchart TB
+    Operator["Operator"] --> UI["React / TypeScript console"]
 
-The diagram organizes the major flows into aligned lanes to make their responsibilities and handoffs clear. It is a high-level view; individual modules may also communicate across lanes.
+    subgraph ServerService["Server service — cmd/server"]
+        UIBackend["Go HTTP server<br/>static UI + REST / streaming API"]
+        ClusterHandlers["Resource, event, log, and exec handlers"]
+        ProposalApply["Proposal review and apply handler<br/>assisted mode only"]
+        AgentProxy["Agent API proxy"]
+        UIBackend --> ClusterHandlers
+        UIBackend --> ProposalApply
+        UIBackend --> AgentProxy
+    end
+
+    UI --> UIBackend
+
+    subgraph AgentService["Investigator service — cmd/agent"]
+        AgentAPI["Query and settings API"]
+        QueryEngine["Query engine and structured read tools"]
+        Monitor["Periodic cluster monitor"]
+        Reporter["Scheduled reporter and notification dispatcher"]
+        Runtime["LLM runtime / provider adapter"]
+        Store[("SQLite or in-memory store<br/>insights • settings • usage • proposals")]
+        AgentAPI --> QueryEngine
+        QueryEngine --> Runtime
+        Monitor --> Runtime
+        Reporter --> Runtime
+        QueryEngine --> Store
+        Monitor --> Store
+        Reporter --> Store
+    end
+
+    AgentProxy --> AgentAPI
+    Runtime <--> LLM["Ollama or configured cloud LLM"]
+    Monitor --> Prometheus["Optional Prometheus endpoint"]
+
+    subgraph ClusterBoundary["Kubernetes cluster boundary"]
+        KubeAPI["Kubernetes API"]
+        Workloads["Namespaces • workloads • pods • events • logs"]
+        KubeAPI --> Workloads
+    end
+
+    ClusterHandlers <--> KubeAPI
+    QueryEngine -->|"read tools"| KubeAPI
+    Monitor -->|"read-only review"| KubeAPI
+    QueryEngine --> Proposal["Remediation proposal"]
+    Proposal --> Store
+    Store --> UI
+    UI -->|"explicit approval"| ProposalApply -->|"validated apply"| KubeAPI
+```
+
 
 ### How it works
 
