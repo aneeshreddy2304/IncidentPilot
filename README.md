@@ -54,7 +54,7 @@ Assisted mode also exposes a manual YAML editor and terminal. Proposal approval 
 
 ![Existing IncidentPilot dashboard showing cluster state](docs/public/screenshots/incidentpilot-dashboard-dark.png)
 
-*Existing project screenshot; not a claim about a currently running public deployment.*
+*Historical prototype screenshot with earlier UI branding; not evidence of a currently running public deployment.*
 
 <details>
 <summary>View the existing investigation and approval recording</summary>
