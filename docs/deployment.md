@@ -115,7 +115,7 @@ What gets created (namespace `incidentpilot`):
 
 | Object | Notes |
 | --- | --- |
-| ServiceAccounts `server`, `agent` + ClusterRoles/Bindings | Split RBAC: server can update/patch + exec; agent is read-only, no secrets |
+| ServiceAccounts `server`, `agent` + ClusterRoles/Bindings | Split RBAC: default readonly mode; server write/exec requires assisted-mode RBAC; agent is read-only, no secrets |
 | Secret `agent-secrets` | `ANTHROPIC_API_KEY` (placeholder — only needed for the anthropic provider) |
 | Deployments `server`, `agent` | Distroless, non-root, read-only rootfs, probes, resource limits |
 | Deployment `ollama` + PVC + Service | Local LLM (default provider); auto-pulls `qwen3:0.6b` on first boot (~1.5GB RAM — check node headroom). Delete it if you use anthropic |

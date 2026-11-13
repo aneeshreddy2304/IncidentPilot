@@ -32,8 +32,8 @@ Shared packages: `internal/k8s` (client-go wrapper), `internal/config`,
 1. **Independent failure domains** — a hung LLM call or provider outage never
    affects browsing resources or tailing logs.
 2. **Least privilege** — the agent runs under its own ServiceAccount with a
-   read-only ClusterRole. Even a prompt-injected or hallucinating model cannot
-   mutate the cluster, because the credentials it runs with cannot.
+   read-only ClusterRole. This cluster RBAC limits writes even if model output is incorrect. Docker/local
+   modes depend on the supplied kubeconfig and must be reviewed separately.
 3. **Independent lifecycle** — restart the agent to pick up a new model/key
    without dropping active exec sessions in the server.
 
@@ -73,7 +73,7 @@ iterations, 1000 log lines and 30KB per tool result — until it produces a
 final answer. Progress (tool calls, text) streams to the UI as SSE events.
 
 **Provider abstraction** (`internal/llm`): a single `Provider` interface
-(`Chat(ctx, req) (*ChatResponse, error)`) with two implementations:
+(`Chat(ctx, req) (*ChatResponse, error)`) with adapters including:
 
 - `llm/anthropic` — official `anthropic-sdk-go`, default model
   `claude-opus-4-8`
@@ -87,8 +87,8 @@ interface and one switch arm in `cmd/agent/main.go`.
 
 | ServiceAccount | Scope | Verbs |
 | --- | --- | --- |
-| `server` | all browsable kinds + `pods/log` | get, list, watch, **update, patch** (YAML editor) |
-| `server` | `pods/exec` | create (terminal) |
+| `server` | all browsable kinds + `pods/log` | get, list, watch, **update, patch** only in assisted mode (YAML editor) |
+| `server` | `pods/exec` | create only in assisted mode (terminal) |
 | `agent` | browsable kinds **except secrets** + `pods/log` | get, list, watch only |
 
 The agent deliberately has no secrets access and no write verbs — verify with
@@ -101,3 +101,5 @@ caching (10s for lists, 15s for agent status). Monaco (bundled locally, so
 air-gapped clusters work; lazy-loaded to keep the initial bundle small) for
 YAML editing, xterm.js for the terminal, SSE via `EventSource`/`fetch` streams
 for logs and agent answers.
+
+See [security.md](security.md) for deployment-specific identity boundaries and operator access assumptions.
