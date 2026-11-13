@@ -1,42 +1,69 @@
-<p align="center"><img src="docs/assets/banner.svg" alt="IncidentPilot — Investigate the signal. Review the change. Stay in control." width="100%"></p>
+# IncidentPilot
 
-<p align="center"><img src="docs/assets/badges/go.svg" alt="go" height="28"> <img src="docs/assets/badges/react.svg" alt="react" height="28"> <img src="docs/assets/badges/typescript.svg" alt="typescript" height="28"> <img src="docs/assets/badges/kubernetes.svg" alt="kubernetes" height="28"> <img src="docs/assets/badges/helm.svg" alt="helm" height="28"> <img src="docs/assets/badges/prometheus.svg" alt="prometheus" height="28"></p>
-
-<p align="center"><strong>A local-first Kubernetes operations console with an AI investigator and human-reviewed remediation proposals.</strong></p>
+**AI-assisted Kubernetes operations with human-controlled remediation**
 
 ## Overview
 
-A local-first Kubernetes operations console with an AI investigator and human-reviewed remediation proposals.
+IncidentPilot is a local-first Kubernetes operations console built around a Go backend, a React interface, and an AI investigation service. Operators can inspect cluster workloads, events, logs, and metrics, then use model-assisted analysis to understand failures while retaining explicit control over proposed changes.
 
-### Why it matters
+### Why this project matters
 
-IncidentPilot brings events, logs, workload state, metrics, and model-assisted reasoning into one operator workflow without hiding the approval boundary.
+Operational tooling must make problems easier to diagnose without allowing automated assistants to mutate infrastructure without oversight. IncidentPilot separates read-only investigation from server-side, human-approved remediation.
 
-## Key features
+## Key capabilities
 
-- Cluster resource, event, log, and terminal views
-- Structured investigation tools for local or cloud LLMs
-- Readonly and assisted operating modes
-- Reviewable YAML remediation proposals
+- Provides Kubernetes resource, event, log, and operational health views.
+- Displays Prometheus-backed metrics alongside application and cluster context.
+- Uses structured investigation tools to give an AI agent constrained access to diagnostic evidence.
+- Supports read-only operation and an assisted mode for proposed remediation.
+- Shows the exact YAML change for operator review before approval.
+- Keeps the investigation agent read-only and applies approved changes through the authorized server path.
+- Provides development and demo workflows for a private test cluster.
 
-## Architecture
+## System architecture
 
-```mermaid
-flowchart LR
-  A[React console] --> B[Go server]
-  B --> C[Kubernetes API]
-  B --> D[AI investigator]
-  D --> C
-  D <--> E[LLM provider]
-  D --> F[Proposal]
-  F --> G[Human review]
-  G -->|Approved| B
-```
+![IncidentPilot architecture — system components and principal workflows](docs/architecture-overview.svg)
+
+The diagram organizes the major flows into aligned lanes to make their responsibilities and handoffs clear. It is a high-level view; individual modules may also communicate across lanes.
+
+### How it works
+
+The React console requests cluster information through the Go server. The investigation agent gathers diagnostic context through constrained tooling and consults an LLM provider when enabled. A suggested remediation is represented as a proposal rather than an automatic action.
+
+The review path deliberately passes through a human decision. Only an approved proposal reaches the server-side Kubernetes mutation boundary.
 
 ## Technology stack
 
-**go** · **react** · **typescript** · **kubernetes** · **helm** · **prometheus**
+| Technology | Purpose |
+| --- | --- |
+| **Go** | Backend services and agent orchestration |
+| **React / TypeScript** | Operator dashboard |
+| **Kubernetes / Helm** | Cluster integration and deployments |
+| **Prometheus** | Infrastructure and workload metrics |
+| **Ollama / model providers** | Model-assisted investigation |
+| **Docker** | Container builds and local environments |
+
+## Repository structure
+
+```text
+cmd/             Go server and investigator entry points
+internal/        Backend and orchestration packages
+web/             React operator console
+charts/          Helm deployment resources
+deploy/          Kubernetes, Docker, and demo manifests
+docs/            Architecture and operational guidance
+Makefile         Development, deployment, and demo commands
+```
 
 ## Getting started
 
-Build the web app with Node.js 22+, then compile the Go server and investigator. Connect only to a disposable or explicitly authorized cluster, begin in readonly mode, and keep the console private.
+```bash
+cd web && npm install && cd ..
+make dev
+# Use an explicitly authorized, disposable Kubernetes cluster.
+# Keep access private; begin in read-only mode.
+```
+
+## Notes and prerequisites
+
+Review `docs/architecture.md`, `docs/security.md`, and deployment documentation before connecting a cluster. The repository provides demo tooling; the project should not be represented as an autonomous production remediation service.
